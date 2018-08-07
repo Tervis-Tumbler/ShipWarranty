@@ -10,9 +10,24 @@ function Invoke-ShipAndPrintWarrantyOrder {
         Invoke-ShipWarrantyOrder -WarrantyRequest $WarrantyRequest -WeightInLB $WeightInLB
         $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
     }
+    Invoke-PrintWarrantyOrder -WarrantyRequest $WarrantyRequest -PrinterName $PrinterName
+}
 
-    if ($PrintParameters) {
-        Invoke-PrintWarrantyOrder -WarrantyRequest $WarrantyRequest -PrinterName $PrinterName
+function ConvertFrom-WarrantyRequestToShipmentParameters {
+    param (
+        [Parameter(Mandatory,ValueFromPipeline)]$WarrantyRequest
+    )
+    process {
+        @{
+            Company = "$($WarrantyRequest.FirstName) $($WarrantyRequest.LastName)"
+            Address1 = $WarrantyRequest.Address1
+            Address2 = $WarrantyRequest.Address2
+            City = $WarrantyRequest.City        
+            StateProvince = $WarrantyRequest.State
+            PostalCode = $WarrantyRequest.PostalCode
+            Phone = $WarrantyRequest.PhoneNumber
+            WeightInLB = $WeightInLB
+        } | Remove-HashtableKeysWithEmptyOrNullValues
     }
 }
 
@@ -21,18 +36,8 @@ function Invoke-ShipWarrantyOrder {
         $WarrantyRequest,
         $WeightInLB
     )
-    $ShipParameters = @{
-        Company = "$($WarrantyRequest.FirstName) $($WarrantyRequest.LastName)"
-        Address1 = $WarrantyRequest.Address1
-        Address2 = $WarrantyRequest.Address2
-        City = $WarrantyRequest.City        
-        StateProvince = $WarrantyRequest.State
-        PostalCode = $WarrantyRequest.PostalCode
-        Phone = $WarrantyRequest.PhoneNumber
-        WeightInLB = $WeightInLB
-    } | Remove-HashtableKeysWithEmptyOrNullValues
-    
-    $ShipmentResult = Invoke-TervisProgisticsReturnsShip @ShipParameters
+    $ShipmentParameters = $WarrantyRequest | ConvertFrom-WarrantyRequestToShipmentParameters
+    $ShipmentResult = New-TervisProgisticsPackageShipmentWarrantyOrder @ShipmentParameters
 
     if ($ShipmentResult.code -eq 0 -and $ShipmentResult.packageResults.code -eq 0) {
         $CarrierParts = $ShipmentResult.service.symbol -split "\." | Select-Object -First 2
@@ -56,7 +61,7 @@ function Invoke-PrintWarrantyOrder {
     if (-not $WarrantyRequest) {
         $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
     }
-    $Response = Invoke-TervisProgisticsPrint -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN -Output Zebra.Zebra110XiIIIPlus
+    $Response = Invoke-TervisProgisticsPackagePrintWarrantyOrder -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN -Output Zebra.Zebra110XiIIIPlus
     $Data = [System.Text.Encoding]::ASCII.GetString($Response.resultdata.output.binaryOutput)
     Send-PrinterData -Data $Data -ComputerName $PrinterName
 }
@@ -65,11 +70,9 @@ function Invoke-UnShipWarrantyOrder {
     param (
         $FreshDeskWarrantyParentTicketID
     )
-    $WarrantyRequest = Get-FreshDeskTicket -ID $FreshDeskWarrantyParentTicketID |
-    Where-Object {-Not $_.Deleted} |
-    ConvertFrom-FreshDeskTicketToWarrantyRequest
+    $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
 
-    $Response = Remove-ProgisticsShip -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN
+    $Response = Remove-ProgisticsPackage -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN
     if ($Response.code -eq 0) {
         Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -custom_fields @{
             cf_shipping_msn = $null
