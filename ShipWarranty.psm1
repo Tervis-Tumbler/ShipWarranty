@@ -42,11 +42,16 @@ function Invoke-ShipWarrantyOrder {
     if ($ShipmentResult.code -eq 0 -and $ShipmentResult.packageResults.code -eq 0) {
         $CarrierParts = $ShipmentResult.service.symbol -split "\." | Select-Object -First 2
         $Carrier = $CarrierParts -join "."
-        Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -custom_fields @{
-            cf_shipping_msn = $ShipmentResult.packageResults.resultdata.msn
-            cf_tracking_number = $ShipmentResult.packageResults.resultdata.trackingNumber
-            cf_shipping_service = $Carrier
-        } | Out-Null
+        try {
+            Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 5 -custom_fields @{
+                cf_shipping_msn = $ShipmentResult.packageResults.resultdata.msn
+                cf_tracking_number = $ShipmentResult.packageResults.resultdata.trackingNumber
+                cf_shipping_service = $Carrier
+            }
+        } catch {
+            Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID $WarrantyRequest.ID
+            throw "Check to confirm all children are closed. Unable to close ticket and set properties. Shipment has been voided."            
+        }
     } else {
         throw "$($ShipmentResult.code) $($ShipmentResult.Message)"
     }
@@ -61,7 +66,7 @@ function Invoke-PrintWarrantyOrder {
     if (-not $WarrantyRequest) {
         $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
     }
-    $Response = Invoke-TervisProgisticsPackagePrintWarrantyOrder -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN -Output Zebra.Zebra110XiIIIPlus
+    $Response = Invoke-TervisProgisticsPackagePrintWarrantyOrder -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN -Output Zebra.Zebra110XiIIIPlus -TrackingNumber $WarrantyRequest.TrackingNumber
     $Data = [System.Text.Encoding]::ASCII.GetString($Response.resultdata.output.binaryOutput)
     Send-PrinterData -Data $Data -ComputerName $PrinterName
 }
@@ -72,12 +77,16 @@ function Invoke-UnShipWarrantyOrder {
     )
     $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
 
-    $Response = Remove-ProgisticsPackage -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN
-    if ($Response.code -eq 0) {
-        Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -custom_fields @{
-            cf_shipping_msn = $null
-            cf_tracking_number = ""
-            cf_shipping_service = $null
+    if ($WarrantyRequest.Carrier) {
+        $Response = Remove-ProgisticsPackage -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN
+        if ($Response.code -eq 0) {
+            Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 2 -custom_fields @{
+                cf_shipping_msn = $null
+                cf_tracking_number = ""
+                cf_shipping_service = $null
+            }
+        } else {
+            Throw "$($Response.code) $($Response.Message) $($Response.resultdata.code) $($Response.resultdata.message)"
         }
     }
 }
