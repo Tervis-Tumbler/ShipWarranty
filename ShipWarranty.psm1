@@ -15,11 +15,13 @@ function Invoke-ShipAndPrintWarrantyOrder {
 
 function ConvertFrom-WarrantyRequestToShipmentParameters {
     param (
-        [Parameter(Mandatory,ValueFromPipeline)]$WarrantyRequest
+        [Parameter(Mandatory,ValueFromPipeline)]$WarrantyRequest,
+        $WeightInLB
     )
     process {
         @{
             Company = "$($WarrantyRequest.FirstName) $($WarrantyRequest.LastName)"
+            Contact = $WarrantyRequest.BusinessName
             Address1 = $WarrantyRequest.Address1
             Address2 = $WarrantyRequest.Address2
             City = $WarrantyRequest.City        
@@ -36,7 +38,7 @@ function Invoke-ShipWarrantyOrder {
         $WarrantyRequest,
         $WeightInLB
     )
-    $ShipmentParameters = $WarrantyRequest | ConvertFrom-WarrantyRequestToShipmentParameters
+    $ShipmentParameters = $WarrantyRequest | ConvertFrom-WarrantyRequestToShipmentParameters -WeightInLB $WeightInLB
     $ShipmentResult = New-TervisProgisticsPackageShipmentWarrantyOrder @ShipmentParameters
 
     if ($ShipmentResult.code -eq 0 -and $ShipmentResult.packageResults.code -eq 0) {
