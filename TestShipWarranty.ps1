@@ -3,12 +3,12 @@ Set-TervisFreshDeskEnvironment
 Set-TervisProgisticsEnvironment -Name delta
 
 
-$FreshDeskWarrantyParentTicketID = 68942
+$FreshDeskWarrantyParentTicketID = 81263
 $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
-Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID 68942 -WeightInLB .1 -PrinterName "cheers"
-Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID 68942 -WeightInLB 1.1 -PrinterName "cheers"
-Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID 68942 -WeightInLB 10.1 -PrinterName "cheers"
-Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID 68942
+Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID -WeightInLB .1 -PrinterName "ClevelandState"
+Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID -WeightInLB 1.1 -PrinterName "ClevelandState"
+Invoke-ShipAndPrintWarrantyOrder -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID -WeightInLB 10.1 -PrinterName "ClevelandState"
+Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
 
 $result = Find-ProgisticsPackage -TrackingNumber 445622761400 -carrier TANDATA_FEDEXFSMS.FEDEX  |
 Select-Object -ExpandProperty ResultData |
