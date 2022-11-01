@@ -20,13 +20,14 @@ function ConvertFrom-WarrantyRequestToShipmentParameters {
     )
     process {
         @{
-            Company = "$($WarrantyRequest.FirstName) $($WarrantyRequest.LastName)"
-            Contact = $WarrantyRequest.BusinessName
-            Address1 = $WarrantyRequest.Address1
-            Address2 = $WarrantyRequest.Address2
-            City = $WarrantyRequest.City        
+            Name = "$($WarrantyRequest.FirstName) $($WarrantyRequest.LastName)"
+            CompanyName = $WarrantyRequest.BusinessName
+            AddressLine1 = $WarrantyRequest.Address1
+            AddressLine2 = $WarrantyRequest.Address2
+            CityLocality = $WarrantyRequest.City        
             StateProvince = $WarrantyRequest.State
             PostalCode = $WarrantyRequest.PostalCode
+            CountryCode = "US"
             Phone = $WarrantyRequest.PhoneNumber
             WeightInLB = $WeightInLB
         } | Remove-HashtableKeysWithEmptyOrNullValues
@@ -39,20 +40,19 @@ function Invoke-ShipWarrantyOrder {
         $WeightInLB
     )
     $ShipmentParameters = $WarrantyRequest | ConvertFrom-WarrantyRequestToShipmentParameters -WeightInLB $WeightInLB
-    $ShipmentResult = New-TervisProgisticsPackageShipmentWarrantyOrder @ShipmentParameters
+    $ShipmentResult = Invoke-TervisShipEngineShipWarrantyOrder @ShipmentParameters
 
-    if ($ShipmentResult.code -eq 0 -and $ShipmentResult.packageResults.code -eq 0) {
-        $CarrierParts = $ShipmentResult.service.symbol -split "\." | Select-Object -First 2
-        $Carrier = $CarrierParts -join "."
+    if ($ShipmentResult.Status -eq 200) {
         try {
             Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 5 -custom_fields @{
-                cf_shipping_msn = $ShipmentResult.packageResults.resultdata.msn
-                cf_tracking_number = $ShipmentResult.packageResults.resultdata.trackingNumber
-                cf_shipping_service = $Carrier
+                cf_shipping_msn = $ShipmentResult.Content.label_id
+                cf_tracking_number = $ShipmentResult.Content.tracking_number
+                cf_shipping_service = $ShipmentResult.Content.service_code
             }
         } catch {
-            Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID $WarrantyRequest.ID
-            throw "Check to confirm all children are closed. Unable to close ticket and set properties. Shipment has been voided."            
+            # Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID $WarrantyRequest.ID
+            $Response = Remove-TervisShipEngineLabel -LabelId $ShipmentResult.Content.label_id
+            throw "Check to confirm all children are closed. Unable to close ticket and set properties. $($Response.Content.message)"            
         }
     } else {
         throw "$($ShipmentResult.code) $($ShipmentResult.Message)"
@@ -68,8 +68,7 @@ function Invoke-PrintWarrantyOrder {
     if (-not $WarrantyRequest) {
         $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
     }
-    $Response = Invoke-TervisProgisticsPackagePrintWarrantyOrder -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN -Output Zebra.Zebra110XiIIIPlus -TrackingNumber $WarrantyRequest.TrackingNumber
-    $Data = [System.Text.Encoding]::ASCII.GetString($Response.resultdata.output.binaryOutput)
+    $Data = Get-TervisShipEngineLabel -LabelId $WarrantyRequest.ShippingMSN
     Send-PrinterData -Data $Data -ComputerName $PrinterName
 }
 
@@ -80,15 +79,15 @@ function Invoke-UnShipWarrantyOrder {
     $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
 
     if ($WarrantyRequest.Carrier) {
-        $Response = Remove-ProgisticsPackage -Carrier $WarrantyRequest.Carrier -MSN $WarrantyRequest.ShippingMSN
-        if ($Response.code -eq 0) {
+        $Response = Remove-TervisShipEngineLabel -LabelId $WarrantyRequest.ShippingMSN
+        if ($Response.Status -eq 200) {
             Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 2 -custom_fields @{
                 cf_shipping_msn = $null
                 cf_tracking_number = ""
                 cf_shipping_service = $null
             }
         } else {
-            Throw "$($Response.code) $($Response.Message) $($Response.resultdata.code) $($Response.resultdata.message)"
+            Throw "$($Response.Status) $($Response.Content.errors.message) [$($Response.Content.errors.error_type)][$($Response.Content.errors.error_code)][$($Response.Content.errors.path)]"
         }
     }
 }
