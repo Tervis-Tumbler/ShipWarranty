@@ -45,14 +45,14 @@ function Invoke-ShipWarrantyOrder {
     if ($ShipmentResult.Status -eq 200) {
         try {
             Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 5 -custom_fields @{
-                cf_shipping_msn = $ShipmentResult.Content.label_id
+                cf_shipping_msn = $ShipmentResult.Content.label_id.substring(3) / 1
                 cf_tracking_number = $ShipmentResult.Content.tracking_number
                 cf_shipping_service = $ShipmentResult.Content.service_code
             }
         } catch {
             # Invoke-UnShipWarrantyOrder -FreshDeskWarrantyParentTicketID $WarrantyRequest.ID
             $Response = Remove-TervisShipEngineLabel -LabelId $ShipmentResult.Content.label_id
-            throw "Check to confirm all children are closed. Unable to close ticket and set properties. $($Response.Content.message)"            
+            throw "Check to confirm all children are closed. Unable to close ticket and set properties. $($Response.Content.message)"
         }
     } else {
         throw "$($ShipmentResult.code) $($ShipmentResult.Message)"
@@ -79,7 +79,7 @@ function Invoke-UnShipWarrantyOrder {
     $WarrantyRequest = Get-WarrantyRequest -FreshDeskWarrantyParentTicketID $FreshDeskWarrantyParentTicketID
 
     if ($WarrantyRequest.Carrier) {
-        $Response = Remove-TervisShipEngineLabel -LabelId $WarrantyRequest.ShippingMSN
+        $Response = Remove-TervisShipEngineLabel -LabelId "se-$($WarrantyRequest.ShippingMSN)"
         if ($Response.Status -eq 200) {
             Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 2 -custom_fields @{
                 cf_shipping_msn = $null
