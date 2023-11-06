@@ -91,3 +91,18 @@ function Invoke-UnShipWarrantyOrder {
         }
     }
 }
+
+function Invoke-ReceiveWarrantyPackage {
+    param (
+        $FreshDeskWarrantyParentTicketID
+    )
+    $Ticket = Get-FreshDeskTicket -ID $FreshDeskWarrantyParentTicketID 
+    if ($Ticket.Status -eq 15) {
+        throw "$FreshDeskWarrantyParentTicketID has already been received"
+    }
+    try {
+        Set-FreshDeskTicket -id $FreshDeskWarrantyParentTicketID -status 15
+    } catch {
+        throw "Failed to receive $FreshDeskWarrantyParentTicketID"
+    }
+}
